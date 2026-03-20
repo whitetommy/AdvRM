@@ -36,7 +36,13 @@ def main(args):
         if not args['random_object_flag']:
             args['obj_full_mask_file'] = f'{scene_file[:-4]}_mask.png'
         advrm=ADVRM(args, writer, None, True, args['random_object_flag'])
-        advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+        # advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+
+        # advrm.run()의 결과를 변수에 담고, 지정된 태그로 터미널에 출력
+        final_mrsr, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+        print(f"OPTUNA_FINAL_MRSR:{final_mrsr}")
+        print(f"OPTUNA_FINAL_SSIM:{final_ssim}")
+
     else:
         for idx in range(args['scene_num']):
             scene_file = scene_set['Filename'].to_list()[idx]
@@ -45,6 +51,11 @@ def main(args):
                 args['obj_full_mask_file'] = f'{scene_file[:-4]}_mask.png'
             advrm=ADVRM(args, writer, None, True, args['random_object_flag'])
             advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+
+            
+            final_mrsr = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+            print(f"Scene {idx} MRSR: {final_mrsr}")
+            print(f"Scene {idx} SSIM: {final_ssim}")
 
 if __name__=='__main__':
     args = get_args()

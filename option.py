@@ -11,12 +11,14 @@ def get_args():
     arg_parser.add_argument('--content_weight', type= float, default=1000000.)
     arg_parser.add_argument('--tv_weight', type= float, default=0.000001)
     arg_parser.add_argument('--adv_weight', type= float, default=1000000.)
-    arg_parser.add_argument('--lambda', type= float, default=0.000015)
+    # arg_parser.add_argument('--lambda', type= float, default=0.00001)
+    arg_parser.add_argument('--lambda', type= float, default=1.7766580301904533e-7)
     arg_parser.add_argument('--beta', type= float, default=1.)
     # optimization
+    # arg_parser.add_argument('--learning_rate', type= float, default=0.004225749286641691)
     arg_parser.add_argument('--learning_rate', type= float, default=0.005)
     arg_parser.add_argument('--decay', type= float, default=0.1)
-    arg_parser.add_argument('--epoch', type= int, default=1000)
+    arg_parser.add_argument('--epoch', type= int, default=500)
     arg_parser.add_argument('--update', type= str, default='bim',choices=['bim','lbfgs'])
     arg_parser.add_argument('--grad_type', type=str, default="base", choices=['base', 'ig', 'omi', 'igomi', 're'])
     # syn
@@ -61,7 +63,7 @@ def get_args():
     # interval
     arg_parser.add_argument('--train_img_log_interval', type=int, default=100)
     arg_parser.add_argument('--train_scale_log_interval', type=int, default=100)
-    arg_parser.add_argument('--inner_eval_interval', type=int, default=50)
+    arg_parser.add_argument('--inner_eval_interval', type=int, default=100)
     arg_parser.add_argument('--model_transfer_eval_interval', type=int, default=100)
     arg_parser.add_argument('--opt_step', type= int, default=1)
     # dir

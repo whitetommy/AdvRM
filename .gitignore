@@ -1,4 +1,4 @@
-*.sh
+.sh
 phy*
 __pycache__/asset/patch/6.b
 runs/
