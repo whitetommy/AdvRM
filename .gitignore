@@ -6,3 +6,5 @@ __pycache__/
 asset/patch/6.b
 runs/
 __pycache__/
+KITTI/object/*
+

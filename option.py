@@ -8,7 +8,8 @@ def get_args():
     # choices=integrated_mde_models)
     # loss weight
     arg_parser.add_argument('--style_weight', type= float, default=1000000.)
-    arg_parser.add_argument('--content_weight', type= float, default=1000000.)
+    #arg_parser.add_argument('--content_weight', type= float, default=1000000.)
+    arg_parser.add_argument('--content_weight', type= float, default=10000000.)
     arg_parser.add_argument('--tv_weight', type= float, default=0.000001)
     arg_parser.add_argument('--adv_weight', type= float, default=1000000.)
     # arg_parser.add_argument('--lambda', type= float, default=0.00001)
@@ -19,7 +20,7 @@ def get_args():
     arg_parser.add_argument('--learning_rate', type= float, default=0.005)
     arg_parser.add_argument('--decay', type= float, default=0.1)
     arg_parser.add_argument('--epoch', type= int, default=500)
-    arg_parser.add_argument('--update', type= str, default='bim',choices=['bim','lbfgs'])
+    arg_parser.add_argument('--update', type= str, default='bim',choices=['bim','lbfgs','adam'])
     arg_parser.add_argument('--grad_type', type=str, default="base", choices=['base', 'ig', 'omi', 'igomi', 're'])
     # syn
     arg_parser.add_argument('--up', type= int, default=230) #
@@ -69,11 +70,11 @@ def get_args():
     # dir
     arg_parser.add_argument('--log_dir_comment', type=str, default="")
     arg_parser.add_argument('--log_dir', type=str, default="runs",help="path to save tensorboard logs")
-    arg_parser.add_argument('--csv_dir', type=str, default="/home/wh/nas/MDE_Attack/AdvRM/scene_set.csv",help='path of the file recording lane points')
-    arg_parser.add_argument('--obj_dir', type=str, default="/home/wh/nas/MDE_Attack/KITTI/object/object",help='path of obstacle images and their masks')
+    arg_parser.add_argument('--csv_dir', type=str, default="/home/whitetommy/AdvRM/scene_set.csv",help='path of the file recording lane points')
+    arg_parser.add_argument('--obj_dir', type=str, default="/home/whitetommy/AdvRM/KITTI/object/object",help='path of obstacle images and their masks')
     arg_parser.add_argument('--patch_file', type=str, default="6.jpg",help='specifical patch file')
-    arg_parser.add_argument('--patch_dir', type=str, default="/home/wh/nas/MDE_Attack/KITTI/object/patch", help='path of patch images and their masks')
-    arg_parser.add_argument('--scene_dir', type=str, default="/home/wh/nas/MDE_Attack/KITTI/object/training/image_2",help='patch of scene images')
+    arg_parser.add_argument('--patch_dir', type=str, default="/home/whitetommy/AdvRM/KITTI/object/patch", help='path of patch images and their masks')
+    arg_parser.add_argument('--scene_dir', type=str, default="/home/whitetommy/AdvRM/KITTI/object/training/image_2",help='patch of scene images')
     arg_parser.add_argument('--obj_full_mask_dir', type=str, default="")
     arg_parser.add_argument('--obj_full_mask_file', type=str, default="")
 

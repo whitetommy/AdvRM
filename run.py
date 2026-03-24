@@ -36,11 +36,12 @@ def main(args):
         if not args['random_object_flag']:
             args['obj_full_mask_file'] = f'{scene_file[:-4]}_mask.png'
         advrm=ADVRM(args, writer, None, True, args['random_object_flag'])
-        # advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
 
-        # advrm.run()의 결과를 변수에 담고, 지정된 태그로 터미널에 출력
-        final_mrsr, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
-        print(f"OPTUNA_FINAL_MRSR:{final_mrsr}")
+        # final_bg_gap, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+        final_e_blend, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+        
+
+        print(f"OPTUNA_FINAL_E_BLEND:{final_e_blend}")
         print(f"OPTUNA_FINAL_SSIM:{final_ssim}")
 
     else:
@@ -53,9 +54,16 @@ def main(args):
             advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
 
             
-            final_mrsr = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
-            print(f"Scene {idx} MRSR: {final_mrsr}")
+            # final_mrsr = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+            # print(f"Scene {idx} MRSR: {final_mrsr}")
+            # print(f"Scene {idx} SSIM: {final_ssim}")
+            # 여기서도 동일하게 변경
+            final_e_blend, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+            print(f"Scene {idx} E_BLEND: {final_e_blend}")
             print(f"Scene {idx} SSIM: {final_ssim}")
+
+            del advrm
+            torch.cuda.empty_cache()
 
 if __name__=='__main__':
     args = get_args()

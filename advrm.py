@@ -101,6 +101,21 @@ class ADVRM:
                 # 찾은 두 점 (X_L, Y_L)과 (X_R, Y_R)
                 y_L, x_L = valid_y[left_idx].float(), left_x[left_idx].float()
                 y_R, x_R = valid_y[right_idx].float(), right_x[right_idx].float()
+
+                # -------------------------------------------------------------
+                if i == 0 and not hasattr(self, 'debug_printed'): 
+                    print(f"\n--- [Mask Split Debug] ---")
+                    print(f"1. 계산된 평균 배경 깊이 (mean_bg_depth): {mean_bg_depth.item():.2f}m")
+                    print(f"2. 좌측 윤곽선 깊이 범위 -> Min: {left_depths.min().item():.2f}m ~ Max: {left_depths.max().item():.2f}m")
+                    print(f"3. 우측 윤곽선 깊이 범위 -> Min: {right_depths.min().item():.2f}m ~ Max: {right_depths.max().item():.2f}m")
+                    
+                    y_min_obj = valid_y.min().float()
+                    y_max_obj = valid_y.max().float()
+                    print(f"4. 자동차 마스크 Y좌표 범위 -> Top(지붕): {y_min_obj}, Bottom(바닥): {y_max_obj}")
+                    print(f"5. 최종 선택된 분할점 Y좌표 -> Left(y_L): {y_L}, Right(y_R): {y_R}")
+                    print(f"------------------------------\n")
+                    self.debug_printed = True # 터미널 도배 방지용 플래그
+                # -------------------------------------------------------------
                 
                 # 두 점을 잇는 직선의 기울기(m) 계산
                 if x_R == x_L:
@@ -207,7 +222,8 @@ class ADVRM:
                     self.log.add_scalar(f'{name_prefix}/debug/benign_bg_gap_rmse', ben_bg_rmse.item(), epoch)
                     self.log.add_scalar(f'{name_prefix}/debug/adv_bg_gap_rmse', adv_bg_rmse.item(), epoch)
                 
-                mean_ori, mean_shift, max_shift, min_shift, arr =self.eval_core(batch_y[0], batch_y[1], batch_resized[-1])
+                # mean_ori, mean_shift, max_shift, min_shift, arr =self.eval_core(batch_y[0], batch_y[1], batch_resized[-1])
+                _, _, _, e_blend, e_cover = self.eval_core(batch_y[0], batch_y[1], batch_resized[-1])
                 
                 adv_loss = self.adv_loss_fn(batch_resized, batch_y, target_depth)
                 
@@ -229,7 +245,8 @@ class ADVRM:
                         if hasattr(self, 'current_mask_up') and hasattr(self, 'current_mask_bt'):
                             self.log.add_image(f'{name_prefix}/train/mask_2_upper', self.current_mask_up.detach().cpu()[0], epoch, dataformats='HW')
                             self.log.add_image(f'{name_prefix}/train/mask_3_bottom', self.current_mask_bt.detach().cpu()[0], epoch, dataformats='HW')
-                        log_scale_train(self.log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, mean_shift, max_shift, min_shift, mean_ori, arr)
+                        # log_scale_train(self.log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, mean_shift, max_shift, min_shift, mean_ori, arr)
+                        log_scale_train(self.log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), e_blend, e_cover)
                 
                 if self.args['inner_eval_flag']:
                     if epoch % self.args['inner_eval_interval']==0 or (epoch+1)==self.args['epoch']: 
@@ -299,7 +316,8 @@ class ADVRM:
                 with torch.no_grad():
                     target_depth = pure_bg_depth
 
-                mean_ori, mean_shift, max_shift, min_shift, arr =self.eval_core(batch_y[0], batch_y[1], batch_resized[-1])
+                # mean_ori, mean_shift, max_shift, min_shift, arr =self.eval_core(batch_y[0], batch_y[1], batch_resized[-1])
+                _, _, _, e_blend, e_cover = self.eval_core(batch_y[0], batch_y[1], batch_resized[-1])
                 
                 adv_loss = self.adv_loss_fn(batch_resized, batch_y, target_depth)
                 
@@ -315,7 +333,8 @@ class ADVRM:
                 if self.args['train_log_flag']:
                     if epoch % self.args['train_img_log_interval']==0 or (epoch+1)==self.args['epoch']:
                         log_img_train(self.log, epoch, name_prefix, [adv_scene_image, ben_scene_image, (self.patch.optmized_patch*255).int().float()/255., batch_y[0], batch_y[1], clean_env, target_depth])
-                        log_scale_train(self.log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, mean_shift, max_shift, min_shift, mean_ori, arr)
+                        # log_scale_train(self.log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, mean_shift, max_shift, min_shift, mean_ori, arr)
+                        log_scale_train(self.log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), e_blend, e_cover)
                 
                 return loss
             if self.args['update']=='lbfgs':
@@ -355,25 +374,91 @@ class ADVRM:
                  name_prefix = f"eval_{self.args['patch_file'][:-4]}_{category}"
                  log_img_eval(self.log, self.args['epoch'], name_prefix, [batch[0], batch[1], (patch*255).int().float()/255., batch_y[0], batch_y[1], batch[2], batch_y[1]])
 
-             mean_ori, mean_shift, max_shift, min_shift, arr =self.eval_core(batch_y[0], batch_y[1], batch[-1])
-             record[0].append(mean_shift.item())
-             record[1].append(max_shift.item())
-             record[2].append(min_shift.item())
-             record[3].append((mean_shift/mean_ori).item())
-             record[4].append(arr.item())
+            #  mean_ori, mean_shift, max_shift, min_shift, arr =self.eval_core(batch_y[0], batch_y[1], batch[-1])
+             _, _, _, e_blend, e_cover = self.eval_core(batch_y[0], batch_y[1], batch[-1])
+         
+             record[0].append(0.0)
+             record[1].append(0.0)
+             record[2].append(0.0)
+             record[3].append(e_blend.item())  # 기존 MRSR 위치
+             record[4].append(e_cover.item())  # 기존 ARR 위치
+         
 
          return record
 
-    def eval_core(self, adv_depth, ref_depth, scene_obj_mask):
-        shift=(adv_depth-ref_depth)*scene_obj_mask
-        mean_shift = torch.sum(shift)/torch.sum(scene_obj_mask)
-        mean_ori = torch.sum(ref_depth*scene_obj_mask)/torch.sum(scene_obj_mask)
-        max_shift=shift[scene_obj_mask==1].max()
-        min_shift=shift[scene_obj_mask==1].min()
+    # def eval_core(self, adv_depth, ref_depth, scene_obj_mask):
+    #     shift=(adv_depth-ref_depth)*scene_obj_mask
+    #     mean_shift = torch.sum(shift)/torch.sum(scene_obj_mask)
+    #     mean_ori = torch.sum(ref_depth*scene_obj_mask)/torch.sum(scene_obj_mask)
+    #     max_shift=shift[scene_obj_mask==1].max()
+    #     min_shift=shift[scene_obj_mask==1].min()
 
-        shift = (adv_depth - ref_depth)
-        relative_shift = (shift / ref_depth)
-        affect_region = relative_shift > 0.14
-        affect_region = affect_region * scene_obj_mask[:, 0, :, :]
-        arr = affect_region.sum() / scene_obj_mask[:, 0, :, :].sum()
-        return mean_ori, mean_shift, max_shift, min_shift, arr
+    #     shift = (adv_depth - ref_depth)
+    #     relative_shift = (shift / ref_depth)
+    #     affect_region = relative_shift > 0.14
+    #     affect_region = affect_region * scene_obj_mask[:, 0, :, :]
+    #     arr = affect_region.sum() / scene_obj_mask[:, 0, :, :].sum()
+    #     return mean_ori, mean_shift, max_shift, min_shift, arr
+
+    def eval_core(self, adv_depth, ref_depth, scene_obj_mask):
+        if adv_depth.dim() == 3:
+            B, H, W = adv_depth.shape
+        else:
+            B, C, H, W = adv_depth.shape
+            
+        tau = 20.0  # 임계값
+        
+        e_blend_batch = 0.0
+        e_cover_batch = 0.0
+        
+        for b in range(B):
+            # 차원에 맞게 HxW 크기의 2D 텐서로 추출
+            d_adv = adv_depth[b, 0] if adv_depth.dim() == 4 else adv_depth[b]
+            d_ben = ref_depth[b, 0] if ref_depth.dim() == 4 else ref_depth[b]
+            m = scene_obj_mask[b, 0] if scene_obj_mask.dim() == 4 else scene_obj_mask[b]
+            
+            if m.sum() == 0:
+                continue
+            
+            # 1. E_cover 계산 (Perturbation Coverage Ratio)
+            cover_mask = (d_adv != d_ben) & (m > 0)
+            e_cover = cover_mask.sum().float() / (m.sum() + 1e-7)
+            e_cover_batch += e_cover
+            
+            # 2. E_blend 계산 (Hiding Error)
+            y_coords, x_coords = torch.meshgrid(torch.arange(H, device=m.device), torch.arange(W, device=m.device), indexing='ij')
+            
+            x_masked_left = x_coords.float().masked_fill(m == 0, float('inf'))
+            x_left_contour = x_masked_left.min(dim=1).values
+            
+            x_masked_right = x_coords.float().masked_fill(m == 0, -1.0)
+            x_right_contour = x_masked_right.max(dim=1).values
+            
+            valid_y = torch.nonzero(x_left_contour != float('inf')).squeeze(-1)
+            
+            if len(valid_y) == 0:
+                continue
+                
+            # 마스크 경계 바로 바깥(배경)을 윤곽선으로 간주
+            x_left_bg = torch.clamp(x_left_contour[valid_y] - 1, min=0).long()
+            x_right_bg = torch.clamp(x_right_contour[valid_y] + 1, max=W-1).long()
+            
+            d_bg_left = d_ben[valid_y, x_left_bg]
+            d_bg_right = d_ben[valid_y, x_right_bg]
+            
+            # 행(row)별 윤곽선 평균 깊이 계산 (\bar{d}_{bg}(i))
+            d_bg_bar = (d_bg_left + d_bg_right) / 2.0
+            
+            d_bg_map = torch.zeros_like(d_adv)
+            d_bg_map[valid_y, :] = d_bg_bar.unsqueeze(1)
+            
+            # 임계값 tau보다 크게 차이나는 픽셀 비율 계산
+            blend_mask = (torch.abs(d_adv - d_bg_map) > tau) & (m > 0)
+            e_blend = blend_mask.sum().float() / (m.sum() + 1e-7)
+            e_blend_batch += e_blend
+            
+        e_blend_mean = torch.tensor(e_blend_batch / B).to(adv_depth.device)
+        e_cover_mean = torch.tensor(e_cover_batch / B).to(adv_depth.device)
+        
+        # log.py 구조가 터지지 않게 앞 3개는 0.0 더미 반환, 뒤에 새 지표 배치
+        return torch.tensor(0.0).to(adv_depth.device), torch.tensor(0.0).to(adv_depth.device), torch.tensor(0.0).to(adv_depth.device), e_blend_mean, e_cover_mean
