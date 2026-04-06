@@ -195,7 +195,6 @@ def log_img_eval(log, epoch, name_prefix, images):
     ben_colored = colormap(ben_norm.numpy())[..., :3]
     adv_colored = colormap(adv_norm.numpy())[..., :3]
   
-    # 🌟 전부 /eval/ 태그로 변경!
     log.add_image(f'{name_prefix}/eval/adv_scene', adv_scene_image.detach().cpu()[0], epoch)
     log.add_image(f'{name_prefix}/eval/ben_scene', ben_scene_image.detach().cpu()[0], epoch)
     log.add_image(f'{name_prefix}/eval/patch', patch.detach().cpu()[0], epoch)
@@ -212,23 +211,42 @@ def log_img_eval(log, epoch, name_prefix, images):
         log.add_image(f'{name_prefix}/eval/target_depth', target_colored, epoch, dataformats='HWC')
 
 
-def log_scale_train(log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, mean_shift, max_shift, min_shift, mean_ori, arr):
+# def log_scale_train(log,epoch, name_prefix, style_score, content_score, tv_score, adv_loss, mean_shift, max_shift, min_shift, mean_ori, arr, e_blend, e_cover):
+#     log.add_scalar(f'{name_prefix}/train/style_score', style_score.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/content_score', content_score.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/tv_score', tv_score.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/adv_loss', adv_loss.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/mean_shift', mean_shift.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/max_shift', max_shift.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/min_shift', min_shift.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/mrsr', (mean_shift/(mean_ori+1e-7)).item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/arr', arr.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/E_blend', e_blend.item(), epoch)
+#     log.add_scalar(f'{name_prefix}/train/E_cover', e_cover.item(), epoch)
+
+# def log_scale_eval(log,epoch, name_prefix, model_name, category, mean_shift, max_shift, min_shift, ror, arr):
+#     log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/mean_shift', mean_shift, epoch)
+#     log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/max_shift', max_shift, epoch)
+#     log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/min_shift', min_shift, epoch)
+#     log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/mrsr', ror, epoch)
+#     log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/arr', arr, epoch)
+
+
+def log_scale_train(log, epoch, name_prefix, style_score, content_score, tv_score, adv_loss, e_blend, e_cover):
+    # Loss 관련
     log.add_scalar(f'{name_prefix}/train/style_score', style_score.item(), epoch)
     log.add_scalar(f'{name_prefix}/train/content_score', content_score.item(), epoch)
     log.add_scalar(f'{name_prefix}/train/tv_score', tv_score.item(), epoch)
     log.add_scalar(f'{name_prefix}/train/adv_loss', adv_loss.item(), epoch)
-    log.add_scalar(f'{name_prefix}/train/mean_shift', mean_shift.item(), epoch)
-    log.add_scalar(f'{name_prefix}/train/max_shift', max_shift.item(), epoch)
-    log.add_scalar(f'{name_prefix}/train/min_shift', min_shift.item(), epoch)
-    log.add_scalar(f'{name_prefix}/train/mrsr', (mean_shift/(mean_ori+1e-7)).item(), epoch)
-    log.add_scalar(f'{name_prefix}/train/arr', arr.item(), epoch)
+    
+    # 핵심 성능 지표 (E_blend, E_cover)
+    log.add_scalar(f'{name_prefix}/train/E_blend', e_blend.item(), epoch)
+    log.add_scalar(f'{name_prefix}/train/E_cover', e_cover.item(), epoch)
 
-def log_scale_eval(log,epoch, name_prefix, model_name, category, mean_shift, max_shift, min_shift, ror, arr):
-    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/mean_shift', mean_shift, epoch)
-    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/max_shift', max_shift, epoch)
-    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/min_shift', min_shift, epoch)
-    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/mrsr', ror, epoch)
-    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/arr', arr, epoch)
+def log_scale_eval(log, epoch, name_prefix, model_name, category, e_blend, e_cover):
+    # 평가용 지표만 깔끔하게 기록
+    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/E_blend', e_blend, epoch)
+    log.add_scalar(f'{name_prefix}/eval/{model_name}/{category}/E_cover', e_cover, epoch)
 
 def record_hparams(args, writer):
     hparams = {

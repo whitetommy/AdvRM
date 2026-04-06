@@ -1,4 +1,3 @@
-
 import sys,os
 current_path = os.path.dirname(os.path.realpath(__file__))
 project_root = os.path.dirname(current_path)

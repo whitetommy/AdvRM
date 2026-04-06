@@ -286,6 +286,7 @@ def predict_depth_fn(MDE,scene,detach=False):
     if model_name in ['depthhints','monodepth2','manydepth']:
         depth_without_norm = model(scene)
         scaler=5.4
+        # scaler=5.4 * 6.15
         depth=torch.clamp(disp_to_depth(torch.abs(depth_without_norm),0.1,80)[1]*scaler,max=80)
         # print(scene.size(), depth_without_norm.size(), depth.size())
 
@@ -297,8 +298,6 @@ def predict_depth_fn(MDE,scene,detach=False):
         depth_without_norm = -1 * depth_without_norm
         depth_without_norm = depth_without_norm + depth_max
         depth = depth_without_norm / depth_max * 80
-
-       
     
     elif model_name == 'adabins':
         bin_edges, predicted_depth = model(scene)

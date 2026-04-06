@@ -19,7 +19,7 @@ def get_args():
     # arg_parser.add_argument('--learning_rate', type= float, default=0.004225749286641691)
     arg_parser.add_argument('--learning_rate', type= float, default=0.005)
     arg_parser.add_argument('--decay', type= float, default=0.1)
-    arg_parser.add_argument('--epoch', type= int, default=500)
+    arg_parser.add_argument('--epoch', type= int, default=1000)
     arg_parser.add_argument('--update', type= str, default='bim',choices=['bim','lbfgs','adam'])
     arg_parser.add_argument('--grad_type', type=str, default="base", choices=['base', 'ig', 'omi', 'igomi', 're'])
     # syn
