@@ -37,10 +37,11 @@ def main(args):
             args['obj_full_mask_file'] = f'{scene_file[:-4]}_mask.png'
         advrm=ADVRM(args, writer, None, True, args['random_object_flag'])
 
-        final_e_blend, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+        final_e_blend, final_ssim, final_e_cover = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
         
-        print(f"OPTUNA_FINAL_E_BLEND:{final_e_blend}")
-        print(f"OPTUNA_FINAL_SSIM:{final_ssim}")
+        print(f"FINAL_E_BLEND:{final_e_blend}")
+        print(f"FINAL_E_COVER:{final_e_cover}")        
+        print(f"FINAL_SSIM:{final_ssim}")
 
     else:
         for idx in range(args['scene_num']):
@@ -49,8 +50,9 @@ def main(args):
             if not args['random_object_flag']:
                 args['obj_full_mask_file'] = f'{scene_file[:-4]}_mask.png'
             advrm=ADVRM(args, writer, None, True, args['random_object_flag'])
-            final_e_blend, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
+            final_e_blend, final_e_cover, final_ssim = advrm.run(args['scene_dir'], scene_file, idx, secen_key_points)
             print(f"Scene {idx} E_BLEND: {final_e_blend}")
+            print(f"Scene {idx} E_COVER: {final_e_cover}")
             print(f"Scene {idx} SSIM: {final_ssim}")
 
             del advrm

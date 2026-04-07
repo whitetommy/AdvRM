@@ -51,9 +51,9 @@ def objective(trial):
         # 터미널에 진행 상황을 다 보고 싶으면 아래 주석 해제
         # print(line, end="") 
         
-        if "OPTUNA_FINAL_E_BLEND:" in line:
+        if "FINAL_E_BLEND:" in line:
             e_blend = float(line.strip().split(":")[-1])
-        elif "OPTUNA_FINAL_SSIM:" in line:
+        elif "FINAL_SSIM:" in line:
             ssim = float(line.strip().split(":")[-1])
             
     process.wait()

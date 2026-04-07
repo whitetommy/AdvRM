@@ -17,6 +17,7 @@ from skimage.metrics import structural_similarity as ssim_metric
 import torchvision.utils as vutils
 import os
 import torch.nn.functional as F
+import random
 
 def bim(grad, input_patch, lr):  
     input_patch=(torch.clamp(input_patch-lr*grad.sign(),0,1)).detach() 
@@ -104,7 +105,9 @@ class ADVRM:
         elif self.args['update']=='adam':
             optimizer = optim.Adam([self.patch.optmized_patch], lr=self.args['learning_rate'])
 
-        final_mrsr = 0.0
+        # final_mrsr = 0.0
+        final_e_blend = 0.0
+        final_e_cover = 0.0
         final_ssim = 0.0
 
         clean_env = F.interpolate(self.env.env, size=([int(self.args['input_height']), int(self.args['input_width'])]))
@@ -115,7 +118,8 @@ class ADVRM:
 
         for epoch in tqdm(range(self.args['epoch']), desc=f"Training {idx}/{self.args['scene_num']}"):
             def closure(): 
-                nonlocal final_mrsr, final_ssim
+                # nonlocal final_mrsr, final_ssim
+                nonlocal final_e_blend, final_e_cover, final_ssim
 
                 self.patch.optmized_patch.data.clamp_(0, 1)
                 batch, patch_size = self.env.accept_patch_and_objects(False, self.patch.optmized_patch, self.patch.mask, self.objects.object_imgs_train, self.env.insert_range, None, None, offset_patch=self.args['train_offset_patch_flag'], color_patch=self.args['train_color_patch_flag'], offset_object=self.args['train_offset_object_flag'], color_object=self.args['train_color_object_flag'])
@@ -177,7 +181,9 @@ class ADVRM:
                             
                             log_scale_eval(self.log, epoch, name_prefix, self.MDE[0], category, np.mean(record[0]), np.mean(record[1]))
 
-                            final_mrsr = np.mean(record[0])
+                            # final_mrsr = np.mean(record[0])
+                            final_e_blend = np.mean(record[0])
+                            final_e_cover = np.mean(record[1])
 
                             if (epoch + 1) == self.args['epoch']:
                                 patch_opt = self.patch.optmized_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
@@ -206,7 +212,8 @@ class ADVRM:
                 grad = torch.autograd.grad(loss, [self.patch.optmized_patch] )[0]
                 self.patch.optmized_patch = bim(grad, self.patch.optmized_patch,self.args['learning_rate'])
 
-        return final_mrsr, final_ssim
+        # return final_mrsr, final_ssim
+        return final_e_blend, final_e_cover, final_ssim
 
     def run_with_fixed_object(self, scene_dir, scene_file, idx, points):
         self.env = ENV(self.args, scene_file, scene_dir, idx, points)
@@ -272,8 +279,22 @@ class ADVRM:
      category = 'car'
      object_num = 1
 
+     save_base_dir = os.path.join("./saved_eval_images", f"epoch_{self.args['epoch']}")
+     os.makedirs(save_base_dir, exist_ok=True)
+
      with torch.no_grad():
          record = [[] for _ in range(2)]
+
+         # 테스트할 전체 차량 대수 계산
+         total_objs = len(self.objects.object_imgs_test[category]) - object_num + 1
+
+         sample_size = min(5, total_objs)            
+        #  log_indices = [i for i in range(0, total_objs, 5)] # <-- 5대 간격으로 보고 싶을 때 (0, 5, 10...)
+         # log_indices = range(total_objs)  # <-- 60대 전원을 다 보고 싶을 때
+         # log_indices = range(10)          # <-- 앞쪽 10대만 보고 싶을 때
+         log_indices = random.sample(range(total_objs), sample_size)
+
+         tqdm.write(f"▶ 전체 {total_objs}대 중 랜덤으로 뽑힌 {len(log_indices)}대의 시각화 데이터를 생성")
 
          for idx in range(len(self.objects.object_imgs_test[category]) - object_num + 1):
              batch, _ = self.env.accept_patch_and_objects(
@@ -288,8 +309,40 @@ class ADVRM:
              batch= [ F.interpolate(item,size=([int(self.args['input_height']),int(self.args['input_width'])])) for item in batch]
              batch_y= predict_batch(batch, MDE)
 
-             if idx == 0 and self.args['train_log_flag']:
-                 name_prefix = f"eval_{self.args['patch_file'][:-4]}_{category}"
+            #  if idx == 0 and self.args['train_log_flag']:
+             if idx in log_indices and self.args['train_log_flag']:
+                 name_prefix = f"eval_{self.args['patch_file'][:-4]}_{category}_obj{idx}"
+
+                 obj_dir = os.path.join(save_base_dir, f"obj_{idx}")
+                 os.makedirs(obj_dir, exist_ok=True)
+
+
+                 vutils.save_image(batch[0][0], os.path.join(obj_dir, "adv_scene.png"))
+                 vutils.save_image(batch[1][0], os.path.join(obj_dir, "ben_scene.png"))
+                 vutils.save_image(batch[2][0], os.path.join(obj_dir, "target_scene.png"))
+                    
+                # 뎁스 맵 컬러 저장 로직
+                 colormap = plt.get_cmap('viridis')
+                    
+                 def save_color_depth(depth_tensor, filename):
+                     d_cpu = depth_tensor.detach().cpu().squeeze()
+                     
+                     # 0~1 정규화
+                     d_norm = (d_cpu - d_cpu.min()) / (d_cpu.max() - d_cpu.min() + 1e-7)
+                     
+                     # (H, W) -> 컬러맵 적용 -> (H, W, 3) 
+                     d_colored = colormap(d_norm.numpy())[..., :3]
+                     
+                     # (H, W, 3) -> permute(2, 0, 1) -> (3, H, W) 
+                     d_tensor = torch.from_numpy(d_colored).permute(2, 0, 1)
+                     
+                     # 2. 🚨 float()를 붙여서 타입 에러(Double -> Float) 사전 차단
+                     vutils.save_image(d_tensor.float(), os.path.join(obj_dir, filename))
+
+                 save_color_depth(batch_y[0][0], "adv_depth.png")
+                 save_color_depth(batch_y[1][0], "ben_depth.png")
+                 save_color_depth(batch_y[2][0], "target_depth.png")
+                 
                  log_img_eval(self.log, self.args['epoch'], name_prefix, [batch[0], batch[1], (patch*255).int().float()/255., batch_y[0], batch_y[1], batch[2], batch_y[2]])
 
              e_blend, e_cover = self.eval_core(batch_y[0], batch_y[1], batch_y[2], batch[-1])
@@ -320,60 +373,22 @@ class ADVRM:
             if m.sum() == 0:
                 continue
             
-            # ====================================================================
             # 1. E_cover 계산 (adv vs benign) -> 패치가 차의 깊이를 얼마나 바꿨나?
-            # ====================================================================
             cover_mask = (d_adv != d_ben) & (m > 0)
+
+            epsilon = 0.1 # MDE모델의 오차 정도를 고려하기 위한 임계값
+            cover_mask = (torch.abs(d_adv - d_ben) > epsilon) & (m > 0)
+
             e_cover = cover_mask.sum().float() / (m.sum() + 1e-7)
             e_cover_batch += e_cover
             
-            # ====================================================================
-            # 2. E_blend 계산 (adv vs pure_bg) -> 차가 진짜 배경에 얼마나 융화됐나?
-            # ====================================================================
+            # E_blend 계산 (adv vs pure_bg) -> 차가 진짜 배경에 얼마나 융화됐나?
             target_mask = (m > 0).float()
             row_bg_sum = (d_pure*target_mask).sum(dim=1)  
             row_bg_count = target_mask.sum(dim=1)          
             
             d_bg_bar = row_bg_sum / (row_bg_count + 1e-7) 
             d_bg_map = d_bg_bar.unsqueeze(1).expand(H, W)
-
-            # # ====================================================================
-            # # [행별 정밀 디버깅] Y좌표마다 랜덤 1픽셀 추출 (Scale 6.15)
-            # # ====================================================================
-            # if b == 0: # 첫 번째 배치만 출력
-            #     import random
-            #     scale = 6.15
-                
-            #     # 마스크(m>0)가 존재하는 고유한 Y 좌표(행)들만 추출
-            #     valid_y_indices = torch.nonzero(m.sum(dim=1) > 0).squeeze(-1).tolist()
-                
-            #     if len(valid_y_indices) > 0:
-            #         print(f"\n[행별 1픽셀 랜덤 디버깅] 스케일(x{scale}) 적용 / 원본 tau={tau} 기준")
-            #         print(f"{'픽셀 좌표(Y,X)':<15} | {'pure_bg (정답)':<15} | {'adv_depth (현재)':<18} | {'절대 오차':<12} | {'결과'}")
-            #         print("-" * 80)
-                    
-            #         # 위에서 아래로(행별로) 스캔
-            #         for y in valid_y_indices:
-            #             # 해당 행(Y)에서 마스크가 존재하는 X 좌표들 추출
-            #             valid_x_indices = torch.nonzero(m[y] > 0).squeeze(-1).tolist()
-                        
-            #             if len(valid_x_indices) > 0:
-            #                 # 랜덤하게 딱 하나만 픽(Pick)
-            #                 x = random.choice(valid_x_indices)
-                            
-            #                 # 스케일(6.15)이 곱해진 실제 미터(m) 값 계산
-            #                 val_pure_scaled = d_pure[y, x].item() * scale
-            #                 val_adv_scaled = d_adv[y, x].item() * scale
-            #                 diff_scaled = abs(val_adv_scaled - val_pure_scaled)
-                            
-            #                 # 합격 판정 (원본 텐서 값 기준오차 <= tau)
-            #                 diff_unscaled = abs(d_adv[y, x].item() - d_pure[y, x].item())
-            #                 status = "🟢 PASS" if diff_unscaled <= tau else "❌ FAIL"
-                            
-            #                 print(f"({y:3d}, {x:3d})       | {val_pure_scaled:11.2f}m    | {val_adv_scaled:12.2f}m      | {diff_scaled:8.2f}m    | {status}")
-                    
-            #         print("-" * 80)
-            # # ====================================================================
     
             blend_mask = (torch.abs(d_adv - d_bg_map) > tau) & (m > 0)
 
