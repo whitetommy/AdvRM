@@ -258,6 +258,7 @@ class ENV:
                         h , v, r = random.uniform(-1, 1), 0, 0.23
                     else:
                         h , v, r = 0, 0, 0.65
+                        # h , v, r = 0, 0, 0.9
                 object_insert_param[category].append([h,v,r])
             if category == 'pas':
                 object_insert_param['pas'].sort( key=lambda x:(x[1],x[0],x[2]),reverse=True)

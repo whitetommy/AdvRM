@@ -159,16 +159,54 @@ class ADVRM:
                 
                 if self.args['train_log_flag']:
                     if epoch % self.args['train_img_log_interval']==0 or (epoch+1)==self.args['epoch']:
-                        log_img_train(self.log, epoch, name_prefix, [adv_scene_image, ben_scene_image, (self.patch.optmized_patch*255).int().float()/255., batch_y[0], batch_y[1], clean_env, target_depth])
+                    # if (epoch+1)==self.args['epoch']:
+                        # log_img_train(self.log, epoch, name_prefix, [adv_scene_image, ben_scene_image, (self.patch.optmized_patch*255).int().float()/255., batch_y[0], batch_y[1], clean_env, target_depth])
+                        log_imgs = [
+                            adv_scene_image.detach().cpu(), 
+                            ben_scene_image.detach().cpu(), 
+                            ((self.patch.optmized_patch*255).int().float()/255.).detach().cpu(), 
+                            batch_y[0].detach().cpu(), 
+                            batch_y[1].detach().cpu(), 
+                            clean_env.detach().cpu(), 
+                            target_depth.detach().cpu()
+                        ]
+                        log_img_train(self.log, epoch, name_prefix, log_imgs)
+
                         self.log.add_image(f'{name_prefix}/train/mask_1_full', object_full_mask.detach().cpu()[0, 0], epoch, dataformats='HW')
                         
                         if hasattr(self, 'current_mask_up') and hasattr(self, 'current_mask_bt'):
                             self.log.add_image(f'{name_prefix}/train/mask_2_upper', self.current_mask_up.detach().cpu()[0], epoch, dataformats='HW')
                             self.log.add_image(f'{name_prefix}/train/mask_3_bottom', self.current_mask_bt.detach().cpu()[0], epoch, dataformats='HW')
+                        # log_scale_train(self.log, epoch, name_prefix, style_score.item(), content_score.item(), tv_score.item(), adv_loss.item(), e_blend.item(), e_cover.item())
                         log_scale_train(self.log, epoch, name_prefix, style_score, content_score, tv_score, adv_loss, e_blend, e_cover)
+
                 
                 if self.args['inner_eval_flag']:
-                    if epoch % self.args['inner_eval_interval']==0 or (epoch+1)==self.args['epoch']: 
+                    # if epoch % self.args['inner_eval_interval']==0 or (epoch+1)==self.args['epoch']: 
+                    if (epoch+1)==self.args['epoch']: 
+                        patch_opt = self.patch.optmized_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
+                        patch_init = self.patch.init_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
+                        final_ssim = ssim_metric(patch_init, patch_opt, data_range=1.0, channel_axis=-1)
+                        self.args['current_ssim'] = final_ssim  # CSV 저장할 때 사용
+
+                        # # 패치 이미지를 저장하는 로직도 위로 같이 끌어올려줘
+                        # save_dir = "./saved_patches"
+                        # os.makedirs(save_dir, exist_ok=True) 
+                        # trial_name = self.args.get('log_dir_comment', f'default_patch').strip()
+                        # save_path = os.path.join(save_dir, f"{trial_name}_scene_{idx}.png")
+                        # vutils.save_image(self.patch.optmized_patch.data, save_path)
+
+                        experiment_root_dir = os.path.dirname(self.log.log_dir)
+                        experiment_name = os.path.basename(experiment_root_dir) # 예: 2026-04-07-18-57-51_multi_scene
+
+                        save_dir = os.path.join("./saved_patches", experiment_name)
+                        os.makedirs(save_dir, exist_ok=True) 
+
+                        trial_name = self.args.get('log_dir_comment', f'default_patch').strip()
+                        save_path = os.path.join(save_dir, f"{trial_name}_scene_{idx:03d}.png")
+                        vutils.save_image(self.patch.optmized_patch.data, save_path)
+
+
                         for category in self.objects.object_imgs_test.keys():
                             if self.args['random_test_flag']:
                                 record = [[] for i in range(2)]
@@ -185,16 +223,16 @@ class ADVRM:
                             final_e_blend = np.mean(record[0])
                             final_e_cover = np.mean(record[1])
 
-                            if (epoch + 1) == self.args['epoch']:
-                                patch_opt = self.patch.optmized_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
-                                patch_init = self.patch.init_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
-                                final_ssim = ssim_metric(patch_init, patch_opt, data_range=1.0, channel_axis=-1)
+                            # if (epoch + 1) == self.args['epoch']:
+                            #     patch_opt = self.patch.optmized_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
+                            #     patch_init = self.patch.init_patch.detach().cpu().squeeze().permute(1, 2, 0).numpy()
+                            #     final_ssim = ssim_metric(patch_init, patch_opt, data_range=1.0, channel_axis=-1)
 
-                                save_dir = "./saved_patches"
-                                os.makedirs(save_dir, exist_ok=True) 
-                                trial_name = self.args.get('log_dir_comment', f'default_patch').strip()
-                                save_path = os.path.join(save_dir, f"{trial_name}_scene_{idx}.png")
-                                vutils.save_image(self.patch.optmized_patch.data, save_path)
+                            #     save_dir = "./saved_patches"
+                            #     os.makedirs(save_dir, exist_ok=True) 
+                            #     trial_name = self.args.get('log_dir_comment', f'default_patch').strip()
+                            #     save_path = os.path.join(save_dir, f"{trial_name}_scene_{idx}.png")
+                            #     vutils.save_image(self.patch.optmized_patch.data, save_path)
 
                 return loss
 
@@ -206,11 +244,13 @@ class ADVRM:
                 optimizer.zero_grad()
                 loss = closure()
                 optimizer.step()
+                del loss
                 self.patch.optmized_patch.data.clamp_(0, 1)
             else: #bim
                 loss = closure()
                 grad = torch.autograd.grad(loss, [self.patch.optmized_patch] )[0]
                 self.patch.optmized_patch = bim(grad, self.patch.optmized_patch,self.args['learning_rate'])
+                del loss
 
         # return final_mrsr, final_ssim
         return final_e_blend, final_e_cover, final_ssim
@@ -271,86 +311,146 @@ class ADVRM:
                 self.patch.optmized_patch = bim(grad, self.patch.optmized_patch,self.args['learning_rate'])
     
     def eval(self, MDE, category, insert_height=None, patch=None):
-     if patch is None:
-         patch = self.patch.optmized_patch
-     if self.args['test_quan_patch_flag']:
-         patch = (patch*255).int().float()/255.
+        if patch is None:
+            patch = self.patch.optmized_patch
+        if self.args['test_quan_patch_flag']:
+            patch = (patch*255).int().float()/255.
 
-     category = 'car'
-     object_num = 1
+        category = 'car'
+        object_num = 1
 
-     save_base_dir = os.path.join("./saved_eval_images", f"epoch_{self.args['epoch']}")
-     os.makedirs(save_base_dir, exist_ok=True)
+        # scene_idx = self.args.get('current_scene_idx', 0)
+        # scene_name = self.args.get('current_scene_name', 'unknown')
+        
+        # save_base_dir = os.path.join("./saved_eval_images", f"scene_{scene_idx:03d}", f"epoch_{self.args['epoch']}")
+        # os.makedirs(save_base_dir, exist_ok=True)
+        
+        # # 예: runs/2026-04-07_experiment/scene_000_...
+        # scene_log_dir = self.log.log_dir 
+        # experiment_root_dir = os.path.dirname(scene_log_dir) # runs/2026-04-07_experiment/
+        scene_idx = self.args.get('current_scene_idx', 0)
+        scene_name = self.args.get('current_scene_name', 'unknown')
+        
+        # 예: runs/2026-04-07_experiment/scene_000_...
+        scene_log_dir = self.log.log_dir 
+        experiment_root_dir = os.path.dirname(scene_log_dir) # runs/2026-04-07_experiment/
+        
+        experiment_name = os.path.basename(experiment_root_dir) 
 
-     with torch.no_grad():
-         record = [[] for _ in range(2)]
-
-         # 테스트할 전체 차량 대수 계산
-         total_objs = len(self.objects.object_imgs_test[category]) - object_num + 1
-
-         sample_size = min(5, total_objs)            
-        #  log_indices = [i for i in range(0, total_objs, 5)] # <-- 5대 간격으로 보고 싶을 때 (0, 5, 10...)
-         # log_indices = range(total_objs)  # <-- 60대 전원을 다 보고 싶을 때
-         # log_indices = range(10)          # <-- 앞쪽 10대만 보고 싶을 때
-         log_indices = random.sample(range(total_objs), sample_size)
-
-         tqdm.write(f"▶ 전체 {total_objs}대 중 랜덤으로 뽑힌 {len(log_indices)}대의 시각화 데이터를 생성")
-
-         for idx in range(len(self.objects.object_imgs_test[category]) - object_num + 1):
-             batch, _ = self.env.accept_patch_and_objects(
-                 True, patch, self.patch.mask, 
-                 self.objects.object_imgs_test,
-                 self.env.insert_range, insert_height, None, 
-                 offset_patch=False, color_patch=False, offset_object=False, color_object=False,
-                 object_idx_g=idx, 
-                 category=category
-             )
-
-             batch= [ F.interpolate(item,size=([int(self.args['input_height']),int(self.args['input_width'])])) for item in batch]
-             batch_y= predict_batch(batch, MDE)
-
-            #  if idx == 0 and self.args['train_log_flag']:
-             if idx in log_indices and self.args['train_log_flag']:
-                 name_prefix = f"eval_{self.args['patch_file'][:-4]}_{category}_obj{idx}"
-
-                 obj_dir = os.path.join(save_base_dir, f"obj_{idx}")
-                 os.makedirs(obj_dir, exist_ok=True)
+        save_base_dir = os.path.join("./saved_eval_images", experiment_name, f"scene_{scene_idx:03d}", f"epoch_{self.args['epoch']}")
+        os.makedirs(save_base_dir, exist_ok=True)
 
 
-                 vutils.save_image(batch[0][0], os.path.join(obj_dir, "adv_scene.png"))
-                 vutils.save_image(batch[1][0], os.path.join(obj_dir, "ben_scene.png"))
-                 vutils.save_image(batch[2][0], os.path.join(obj_dir, "target_scene.png"))
+        with torch.no_grad():
+            record = [[] for _ in range(2)]
+            total_objs = len(self.objects.object_imgs_test[category]) - object_num + 1
+            
+            detail_rows = []
+
+            sample_size = 5
+            log_indices = random.sample(range(total_objs), sample_size)
+
+            tqdm.write(f"▶ [Scene {scene_idx}] 전체 {total_objs}대 평가 중...")
+
+            for idx in range(total_objs):
+                current_file_full = self.objects.object_files_test[category][idx]
+                current_file_name = current_file_full.split('.')[0] # 'car_38.jpg' -> 'car_38'
+
+
+                batch, _ = self.env.accept_patch_and_objects(
+                    True, patch, self.patch.mask, 
+                    self.objects.object_imgs_test,
+                    self.env.insert_range, insert_height, None, 
+                    offset_patch=False, color_patch=False, offset_object=False, color_object=False,
+                    object_idx_g=idx, 
+                    category=category
+                )
+
+                batch = [F.interpolate(item, size=([int(self.args['input_height']), int(self.args['input_width'])])) for item in batch]
+                batch_y = predict_batch(batch, MDE)
+
+                # 점수 계산
+                e_blend, e_cover = self.eval_core(batch_y[0], batch_y[1], batch_y[2], batch[-1])
+                
+                eb_val = e_blend.item()
+                ec_val = e_cover.item()
+                
+                record[0].append(eb_val)
+                record[1].append(ec_val)
+                
+                # 📝 개별 차량 데이터 기록
+                detail_rows.append({
+                    'Object_Idx': idx,
+                    'Object_File': current_file_full,
+                    'E_Blend': eb_val,
+                    'E_Cover': ec_val
+                })
+
+                # 시각화 저장 로직 (선택된 5대만)
+                if idx in log_indices and self.args['train_log_flag']:
+                    # name_prefix = f"eval_{self.args['patch_file'][:-4]}_{category}_obj{idx}"
+                    name_prefix = f"eval_{self.args['patch_file'][:-4]}_{current_file_name}"
+
+                    # obj_dir = os.path.join(save_base_dir, f"obj_{idx}")
+                    obj_dir = os.path.join(save_base_dir, f"obj_{current_file_name}")
+                    os.makedirs(obj_dir, exist_ok=True)
+
+                    vutils.save_image(batch[0][0], os.path.join(obj_dir, "adv_scene.png"))
+                    vutils.save_image(batch[1][0], os.path.join(obj_dir, "ben_scene.png"))
+                    vutils.save_image(batch[2][0], os.path.join(obj_dir, "target_scene.png"))
                     
-                # 뎁스 맵 컬러 저장 로직
-                 colormap = plt.get_cmap('viridis')
+                    colormap = plt.get_cmap('viridis')
+                    def save_color_depth(depth_tensor, filename):
+                        d_cpu = depth_tensor.detach().cpu().squeeze()
+                        d_norm = (d_cpu - d_cpu.min()) / (d_cpu.max() - d_cpu.min() + 1e-7)
+                        d_colored = colormap(d_norm.numpy())[..., :3]
+                        d_tensor = torch.from_numpy(d_colored).permute(2, 0, 1)
+                        vutils.save_image(d_tensor.float(), os.path.join(obj_dir, filename))
+
+                    save_color_depth(batch_y[0][0], "adv_depth.png")
+                    save_color_depth(batch_y[1][0], "ben_depth.png")
+                    save_color_depth(batch_y[2][0], "target_depth.png")
                     
-                 def save_color_depth(depth_tensor, filename):
-                     d_cpu = depth_tensor.detach().cpu().squeeze()
-                     
-                     # 0~1 정규화
-                     d_norm = (d_cpu - d_cpu.min()) / (d_cpu.max() - d_cpu.min() + 1e-7)
-                     
-                     # (H, W) -> 컬러맵 적용 -> (H, W, 3) 
-                     d_colored = colormap(d_norm.numpy())[..., :3]
-                     
-                     # (H, W, 3) -> permute(2, 0, 1) -> (3, H, W) 
-                     d_tensor = torch.from_numpy(d_colored).permute(2, 0, 1)
-                     
-                     # 2. 🚨 float()를 붙여서 타입 에러(Double -> Float) 사전 차단
-                     vutils.save_image(d_tensor.float(), os.path.join(obj_dir, filename))
+                    # log_img_eval(self.log, self.args['epoch'], name_prefix, [batch[0], batch[1], (patch*255).int().float()/255., batch_y[0], batch_y[1], batch[2], batch_y[2]])
+                    
+                    log_imgs_eval = [
+                        batch[0].detach().cpu(), 
+                        batch[1].detach().cpu(), 
+                        ((patch*255).int().float()/255.).detach().cpu(), 
+                        batch_y[0].detach().cpu(), 
+                        batch_y[1].detach().cpu(), 
+                        batch[2].detach().cpu(), 
+                        batch_y[2].detach().cpu()
+                    ]
+                    log_img_eval(self.log, self.args['epoch'], name_prefix, log_imgs_eval)
 
-                 save_color_depth(batch_y[0][0], "adv_depth.png")
-                 save_color_depth(batch_y[1][0], "ben_depth.png")
-                 save_color_depth(batch_y[2][0], "target_depth.png")
-                 
-                 log_img_eval(self.log, self.args['epoch'], name_prefix, [batch[0], batch[1], (patch*255).int().float()/255., batch_y[0], batch_y[1], batch[2], batch_y[2]])
 
-             e_blend, e_cover = self.eval_core(batch_y[0], batch_y[1], batch_y[2], batch[-1])
-         
-             record[0].append(e_blend.item())
-             record[1].append(e_cover.item())
+            detail_df = pd.DataFrame(detail_rows)
+            detail_csv_path = os.path.join(scene_log_dir, f"scene_{scene_idx:03d}_detail_results.csv")
+            detail_df.to_csv(detail_csv_path, index=False)
 
-         return record
+            avg_eb = np.mean(record[0])
+            avg_ec = np.mean(record[1])
+            
+            summary_csv_path = os.path.join(experiment_root_dir, "experiment_summary.csv")
+            summary_row = pd.DataFrame([{
+                'Scene_Idx': scene_idx,
+                'Scene_Name': scene_name,
+                'Avg_E_Blend': avg_eb,
+                'Avg_E_Cover': avg_ec,
+                'SSIM': self.args.get('current_ssim', 0),
+                'Epoch': self.args['epoch']
+            }])
+
+            if not os.path.exists(summary_csv_path):
+                summary_row.to_csv(summary_csv_path, index=False)
+            else:
+                summary_row.to_csv(summary_csv_path, mode='a', header=False, index=False)
+
+            tqdm.write(f"💾 Scene {scene_idx:03d} 결과 저장 완료 (Mean E_Blend: {avg_eb:.4f})")
+
+            return record
+        
 
     def eval_core(self, adv_depth, ref_depth, pure_bg_depth, scene_obj_mask):
         if adv_depth.dim() == 3:
@@ -358,7 +458,15 @@ class ADVRM:
         else:
             B, C, H, W = adv_depth.shape
             
-        tau = 1 # 임계값 (real-world =5m)
+        # tau = 1 # 임계값 (real-world =5m)
+        # tau = 10 # 임계값 (real-world =25m)
+        # tau = 5 # 임계값 (real-world =12.5m)
+        # tau = 1
+
+        # 🚨 [수정] 절대값 기준(tau=10) 대신, 상대적 비율(%) 기준 적용
+        # tau_ratio = 0.1      # 배경 깊이 대비 10% 이상 왜곡되면 동화(Blend)된 것으로 간주
+        tau_ratio = 0.3      # 배경 깊이 대비 30% 이상 왜곡되면 동화(Blend)된 것으로 간주
+        epsilon_ratio = 0.3 # 원본 차량 깊이 대비 30% 이상 깊이가 변했는지 확인
         
         e_blend_batch = 0.0
         e_cover_batch = 0.0
@@ -373,28 +481,59 @@ class ADVRM:
             if m.sum() == 0:
                 continue
             
-            # 1. E_cover 계산 (adv vs benign) -> 패치가 차의 깊이를 얼마나 바꿨나?
-            cover_mask = (d_adv != d_ben) & (m > 0)
+            # # 1. E_cover 계산 (adv vs benign) -> 패치가 차의 깊이를 얼마나 바꿨나?
+            # cover_mask = (d_adv != d_ben) & (m > 0)
 
-            epsilon = 0.1 # MDE모델의 오차 정도를 고려하기 위한 임계값
-            cover_mask = (torch.abs(d_adv - d_ben) > epsilon) & (m > 0)
+            # # epsilon = 0.2 # MDE모델의 오차 정도를 고려하기 위한 임계값
+            # cover_mask = (torch.abs(d_adv - d_ben) > epsilon) & (m > 0)
+
+            # e_cover = cover_mask.sum().float() / (m.sum() + 1e-7)
+            # e_cover_batch += e_cover
+            
+            # # E_blend 계산 (adv vs pure_bg) -> 차가 진짜 배경에 얼마나 융화됐나?
+            # target_mask = (m > 0).float()
+            # row_bg_sum = (d_pure*target_mask).sum(dim=1)  
+            # row_bg_count = target_mask.sum(dim=1)          
+            
+            # d_bg_bar = row_bg_sum / (row_bg_count + 1e-7) 
+            # d_bg_map = d_bg_bar.unsqueeze(1).expand(H, W)
+    
+            # blend_mask = (torch.abs(d_adv - d_bg_map) > tau) & (m > 0)
+
+            # e_blend = blend_mask.sum().float() / (m.sum() + 1e-7)
+            # e_blend_batch += e_blend
+
+            # 1. E_cover 계산 (비율 기반)
+            # 패치 부착 후 차량의 깊이가 '기존 차량 깊이' 대비 얼마나(%) 변했는가?
+            diff_cover_ratio = torch.abs(d_adv - d_ben) / (d_ben + 1e-7)
+            cover_mask = (diff_cover_ratio > epsilon_ratio) & (m > 0)
 
             e_cover = cover_mask.sum().float() / (m.sum() + 1e-7)
             e_cover_batch += e_cover
             
-            # E_blend 계산 (adv vs pure_bg) -> 차가 진짜 배경에 얼마나 융화됐나?
+            # 2. E_blend 계산 (비율 기반)
             target_mask = (m > 0).float()
-            row_bg_sum = (d_pure*target_mask).sum(dim=1)  
+            row_bg_sum = (d_pure * target_mask).sum(dim=1)  
             row_bg_count = target_mask.sum(dim=1)          
             
             d_bg_bar = row_bg_sum / (row_bg_count + 1e-7) 
             d_bg_map = d_bg_bar.unsqueeze(1).expand(H, W)
     
-            blend_mask = (torch.abs(d_adv - d_bg_map) > tau) & (m > 0)
+            # 공격 후 깊이가 '진짜 배경 깊이'와 비교했을 때 몇 % 차이나는가?
+            # (이 차이가 tau_ratio보다 커야 공격 성공으로 간주)
+            diff_blend_ratio = torch.abs(d_adv - d_bg_map) / (d_bg_map + 1e-7)
+            
+            # # [디버깅] 비율 오차가 실제로 어느 정도 찍히는지 확인
+            # valid_ratios = diff_blend_ratio[m > 0]
+            # if valid_ratios.numel() > 0:
+            #     max_r = valid_ratios.max().item() * 100
+            #     mean_r = valid_ratios.mean().item() * 100
+            #     print(f"  [DEBUG] Blend 왜곡 비율 -> Max: {max_r:.2f}% | Mean: {mean_r:.2f}% (기준: {tau_ratio*100}%)")
 
+            blend_mask = (diff_blend_ratio > tau_ratio) & (m > 0)
             e_blend = blend_mask.sum().float() / (m.sum() + 1e-7)
             e_blend_batch += e_blend
-            
+
         e_blend_mean = (e_blend_batch / B).detach().clone().to(adv_depth.device)
         e_cover_mean = (e_cover_batch / B).detach().clone().to(adv_depth.device)
         
