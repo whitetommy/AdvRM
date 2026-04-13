@@ -59,19 +59,16 @@ class ENV:
         top_mid=[road_key_points[0][0],round((road_key_points[0][1]+road_key_points[1][1])/2)]
         bottom_mid=[road_key_points[2][0],round((road_key_points[2][1]+road_key_points[3][1])/2)]
         road_param=[road_top,road_top_width,road_bottom_width,road_height,top_mid,bottom_mid]
-        # print(road_top)
-        insert_range=[u,b]#[u if road_top<u else road_top, b]
+        insert_range=[u,b]
         return insert_range, road_param
     
     def accept_init(self, object_imgs, category=None, eval_flag=False,  offset_object=False):
         object_insert_param={}
         if category is None:
             categories = list(object_imgs.keys())
-            # print('test!!!',categories)
             idx = random.randint(0,len(categories)-1)
             category = categories[idx]
 
-        # for category in object_imgs.keys():
         if category == 'pas' and not eval_flag:
             random.shuffle(object_imgs['pas'])
         object_insert_param[category]=[]
@@ -246,9 +243,14 @@ class ENV:
             # for category in object_imgs.keys():
             if category == 'pas' and not eval_flag:
                 random.shuffle(object_imgs['pas'])
+
             object_insert_param[category]=[]
             for _ in range(len(object_imgs[category])):
-                if offset_object:
+                if eval_flag and 'test_v_ratio' in self.args:
+                    h, v, r = 0.0, self.args['test_v_ratio'], 0.7  # 논문 환경 통제
+
+                # if offset_object:
+                elif offset_object:
                     if category == 'pas':
                         h , v, r = random.uniform(-1, 1), random.uniform(0., 0.13), 0.23
                     else:
@@ -258,8 +260,9 @@ class ENV:
                         h , v, r = random.uniform(-1, 1), 0, 0.23
                     else:
                         h , v, r = 0, 0, 0.65
-                        # h , v, r = 0, 0, 0.9
+
                 object_insert_param[category].append([h,v,r])
+                
             if category == 'pas':
                 object_insert_param['pas'].sort( key=lambda x:(x[1],x[0],x[2]),reverse=True)
                 object_num = 3
